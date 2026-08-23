@@ -105,10 +105,19 @@ cd python && .venv/Scripts/python export_models.py
 
 O script baixa os pesos oficiais do release
 [`ultralytics/assets` v8.4.0](https://github.com/ultralytics/assets/releases),
-exporta com `opset=12`, copia os `.onnx` para `delphi/bin/yolo/` e imprime o
-SHA256 de cada `.pt`. Os hashes esperados estão em
-[python/PROCEDENCIA.md](python/PROCEDENCIA.md) — compare, se quiser conferir a
-integridade.
+exporta com `opset=12` e imprime o SHA256 de cada `.pt`. Os `.onnx` saem
+organizados por tamanho em `delphi/bin/yolo/<n|s|m|l|x>/`, cada pasta com as
+cinco tarefas — 25 modelos ao todo, o que permite comparar velocidade e
+acurácia entre tamanhos.
+
+Para gerar só um recorte da matriz:
+
+```bash
+cd python && .venv/Scripts/python export_models.py --sizes n,s --tasks detect,pose
+```
+
+Os hashes esperados estão em [python/PROCEDENCIA.md](python/PROCEDENCIA.md) —
+compare, se quiser conferir a integridade.
 
 Para gerar também as variantes sem NMS-free (que exercitam o caminho de
 supressão de não-máximos):
@@ -174,11 +183,11 @@ Modelo e imagem são obrigatórios; o argumento terminado em `.onnx` é tomado
 como modelo, o outro como imagem. Sem argumentos, o programa imprime a ajuda.
 
 ```bash
-./ONNXDemo.exe yolo/yolo26x.onnx imagem/bus.jpg
+./ONNXDemo.exe yolo/n/yolo26n.onnx imagem/bus.jpg
 ```
 
 ```bash
-./ONNXDemo.exe yolo/yolo26x-seg.onnx imagem/bus.jpg --conf=0.4
+./ONNXDemo.exe yolo/x/yolo26x-seg.onnx imagem/bus.jpg --conf=0.4
 ```
 
 ```bash
@@ -258,7 +267,7 @@ primeiras posições do vetor), gerados pela implementação Python, estão em
 │   ├── run_tests.sh          bateria de regressão
 │   └── bin/
 │       ├── onnxruntime.dll   (passo 2)
-│       ├── yolo/             (passo 5)
+│       ├── yolo/n|s|m|l|x/   (passo 5) — 5 tarefas por tamanho
 │       ├── face/             (passo 6)
 │       ├── imagem/           entradas (passo 7)
 │       └── saida/            tudo que o programa gera
