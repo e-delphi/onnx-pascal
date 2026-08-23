@@ -1,0 +1,70 @@
+# ---------------------------------------------------------------------------
+# Este repositorio guarda codigo, scripts e documentacao. Nada de binario
+# grande: o ONNX Runtime, os modelos e as imagens sao baixados pelo passo a
+# passo do README, o que mantem o clone leve e a procedencia rastreavel.
+# ---------------------------------------------------------------------------
+
+# --- ONNX Runtime (baixado do release oficial; ~1,6 GB com o .pdb) ---
+c++/
+onnxruntime.dll
+onnxruntime_providers_shared.dll
+*.pdb
+
+# --- Modelos ---------------------------------------------------------------
+# .onnx e .pt sao gerados/baixados por python/export_models.py.
+# .pt em especial e pickle do Python: nunca versionar peso de origem incerta.
+*.onnx
+*.pt
+*.onnx.data
+*.onnx_data
+buffalo_l.zip
+python/models/
+python/weights/
+
+# --- Dados biometricos -----------------------------------------------------
+# A galeria contem embeddings faciais, que sao dados pessoais sensiveis.
+# Nao versionar em hipotese nenhuma.
+*.gallery
+python/faces/
+
+# --- Pasta de execucao -----------------------------------------------------
+# Tudo em bin/ e baixado (DLL, modelos, imagens), gerado (saida/) ou
+# compilado (.exe). O README reconstroi a pasta inteira do zero.
+delphi/bin/
+
+# --- Build do Delphi -------------------------------------------------------
+*.dcu
+*.exe
+*.rsm
+*.map
+*.drc
+*.identcache
+*.local
+*.stat
+*.tvsconfig
+__history/
+__recovery/
+delphi/dcu/
+delphi/Win32/
+delphi/Win64/
+delphi/Android/
+delphi/Android64/
+delphi/Release/
+delphi/Debug/
+
+# --- Python ----------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Sistema operacional / editores ----------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/

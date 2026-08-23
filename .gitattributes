@@ -1,0 +1,31 @@
+# Fim de linha explicito, para o projeto se comportar igual em qualquer
+# maquina independente da configuracao de core.autocrlf de cada um.
+
+* text=auto
+
+# Fontes e projeto do Delphi: o IDE grava e espera CRLF.
+*.pas   text eol=crlf
+*.dpr   text eol=crlf
+*.dpk   text eol=crlf
+*.inc   text eol=crlf
+*.dproj text eol=crlf
+*.dfm   text eol=crlf
+
+# Scripts que rodam em shell POSIX quebram com CRLF.
+*.sh    text eol=lf
+*.py    text eol=lf
+
+*.md    text
+*.json  text eol=lf
+
+# Binarios: nunca converter.
+*.res   binary
+*.onnx  binary
+*.pt    binary
+*.dll   binary
+*.png   binary
+*.jpg   binary
+*.zip   binary
+
+# A galeria e gerada pelo programa; nao deveria ser versionada de todo modo.
+*.gallery -text

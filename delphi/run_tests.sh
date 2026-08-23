@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Bateria de regressao do ONNXDemo.
+# Uso: ./run_tests.sh          (a partir da pasta delphi/)
+set -u
+cd "$(dirname "$0")/bin" || exit 1
+
+EXE=./ONNXDemo.exe
+PASS=0; FAIL=0
+
+run() {
+  local nome="$1"; shift
+  local esperado="$1"; shift
+  echo "─────────────────────────────────────────────────────────────"
+  echo "▶ $nome"
+  local saida
+  saida=$("$EXE" "$@" --no-pause --quiet 2>&1)
+  if echo "$saida" | grep -qE "$esperado"; then
+    echo "  ✔ PASSOU"
+    echo "$saida" | grep -E "^  #|Tempos|saidas|Output 0" | head -6 | sed 's/^/    /'
+    PASS=$((PASS+1))
+  else
+    echo "  x FALHOU (esperava /$esperado/)"
+    echo "$saida" | tail -6 | sed 's/^/    /'
+    FAIL=$((FAIL+1))
+  fi
+}
+
+echo "═════════════════════════════════════════════════════════════"
+echo " Regressao ONNXDemo — modelos reexportados"
+echo "═════════════════════════════════════════════════════════════"
+
+run "detect   / bus.jpg"    "bus.*9[0-9],"      yolo/yolo26x.onnx      imagem/bus.jpg    --out=saida/t_detect.png
+run "segment  / bus.jpg"    "mascara: [0-9]+x"  yolo/yolo26x-seg.onnx  imagem/bus.jpg    --out=saida/t_seg.png
+run "pose     / zidane.jpg" "keypoints: [0-9]+" yolo/yolo26x-pose.onnx imagem/zidane.jpg --out=saida/t_pose.png
+run "obb      / boats.jpg"  "orientada: centro" yolo/yolo26x-obb.onnx  imagem/boats.jpg  --out=saida/t_obb.png
+run "classify / zidane.jpg" "suit"              yolo/yolo26l-cls.onnx  imagem/zidane.jpg --no-render
+run "squeezenet / dog.jpg"  "Samoyed"           squeezenet/squeezenet1_1.onnx imagem/dog.jpg --labels=squeezenet/labels.txt --no-render
+run "5-crop   / dog.jpg"    "Samoyed"           squeezenet/squeezenet1_1.onnx imagem/dog.jpg --labels=squeezenet/labels.txt --multi-crop --no-render
+
+run "face     / obama.jpg"  "score [0-9]+"       --query imagem/obama.jpg
+echo "─────────────────────────────────────────────────────────────"
+echo "  Erros esperados (devem falhar com mensagem limpa, sem crash):"
+for args in "yolo/yolo26x.onnx imagem/naoexiste.jpg" "yolo/nada.onnx imagem/bus.jpg" "imagem/bus.jpg" "yolo/yolo26x.onnx imagem/bus.jpg --conf=abc"; do
+  msg=$($EXE $args --no-pause 2>&1 | grep -E "^ERRO" | head -1)
+  if [ -n "$msg" ]; then echo "    ✔ $msg"; PASS=$((PASS+1)); else echo "    ✗ sem erro para: $args"; FAIL=$((FAIL+1)); fi
+done
+
+echo "═════════════════════════════════════════════════════════════"
+echo "  $PASS passaram, $FAIL falharam"
+echo "═════════════════════════════════════════════════════════════"
+[ "$FAIL" -eq 0 ]
