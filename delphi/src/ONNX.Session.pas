@@ -6,13 +6,11 @@ unit ONNX.Session;
   Responsabilidade unica: executar um grafo ONNX e expor os metadados dele.
   Nao sabe nada sobre imagens, YOLO, caixas ou classes.
 
-  Diferencas em relacao a versao anterior:
-    - suporta N inputs e N outputs (segmentacao devolve 2 tensores);
-    - le outputs FLOAT32, FLOAT16, DOUBLE, INT8/16/32/64, UINT8/16/32 e BOOL,
-      convertendo tudo para Single;
-    - expoe os metadados customizados do modelo (Ultralytics grava task,
-      names, imgsz, kpt_shape, stride ali);
-    - libera todos os handles ORT mesmo em caso de erro no meio do Run.
+  Suporta N inputs e N outputs (segmentacao devolve 2 tensores). Le outputs
+  FLOAT32, FLOAT16, DOUBLE, INT8/16/32/64, UINT8/16/32 e BOOL, convertendo
+  tudo para Single. Expoe os metadados customizados do modelo, onde a
+  Ultralytics grava task, names, imgsz, kpt_shape e stride. Todos os handles
+  ORT sao liberados mesmo se o Run falhar no meio.
 }
 
 interface

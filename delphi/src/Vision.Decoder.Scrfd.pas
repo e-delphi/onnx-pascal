@@ -3,8 +3,7 @@ unit Vision.Decoder.Scrfd;
 {
   Cabeca de deteccao facial SCRFD (det_10g do pacote buffalo_l da InsightFace).
 
-  Formato verificado rodando o modelo e inspecionando os tensores, nao
-  deduzido de documentacao:
+  Formato das saidas:
 
     9 saidas, rank 2, agrupadas em 3 niveis de piramide:
 
@@ -20,7 +19,7 @@ unit Vision.Decoder.Scrfd;
   Os nomes das saidas sao numericos ("448", "471", ...) e nao servem de
   referencia: o agrupamento e feito por shape, e o stride de cada grupo e
   derivado resolvendo N = (netW div s) * (netH div s) * A. Se nenhuma
-  combinacao fechar, o decoder falha em vez de adivinhar.
+  combinacao fechar, o decoder levanta erro.
 
   Os 5 pontos saem na ordem: olho esquerdo, olho direito, nariz, canto
   esquerdo da boca, canto direito da boca - que e exatamente a ordem que o

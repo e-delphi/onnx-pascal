@@ -122,11 +122,8 @@ begin
 
       { Nos dois formatos as quatro primeiras colunas sao cx, cy, w, h em
         pixels do letterbox. Difere das cabecas detect/segment/pose, que
-        emitem cantos x1,y1,x2,y2 - para uma caixa rotacionada os cantos
-        alinhados nao descreveriam a geometria. Verificado contra a saida
-        real de yolo26x-obb: col2/col3 ficam na faixa 4..470 (dimensoes),
-        nao 500..1000 como seriam x2/y2, e col1 respeita o padding do
-        letterbox. }
+        emitem cantos x1,y1,x2,y2: para uma caixa rotacionada os cantos
+        alinhados ao eixo nao descrevem a geometria. }
       Detection.Obb.CX := Context.Transform.NetToSourceX(View.Value(A, 0));
       Detection.Obb.CY := Context.Transform.NetToSourceY(View.Value(A, 1));
       Detection.Obb.W := Context.Transform.NetToSourceLength(View.Value(A, 2));

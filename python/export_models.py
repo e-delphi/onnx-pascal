@@ -1,10 +1,9 @@
 """
-Baixa os pesos oficiais da Ultralytics e reexporta tudo para ONNX.
+Baixa os pesos oficiais da Ultralytics e exporta para ONNX.
 
-Motivo: os .onnx que estavam em bin/yolo vieram de terceiros. Um deles
-(yolo26x-obb) tinha metadados dizendo end2end=True mas emitia a cabeca crua
-em 9 tensores. Reexportando aqui, a procedencia e os argumentos ficam sob
-nosso controle e iguais para todos os modelos.
+Nao existe .onnx oficial de YOLO26: a Ultralytics distribui apenas .pt.
+Exportar aqui mantem a procedencia rastreavel e os argumentos iguais para
+todos os modelos.
 
 Os pesos sao baixados pela propria ultralytics a partir do release oficial
 github.com/ultralytics/assets. O sha256 de cada .pt e impresso para registro.

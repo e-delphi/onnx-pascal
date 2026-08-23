@@ -20,11 +20,8 @@ unit Vision.Face.Align;
 
   com u,v e U,V os pontos de origem e destino centrados na media.
 
-  Conferido contra a implementacao de referencia (Umeyama via SVD do
-  scikit-image, que e o que a InsightFace usa): diferenca maxima de 9,5e-7
-  nos coeficientes, recortes identicos pixel a pixel e cosseno 1,0 entre os
-  embeddings resultantes. A forma fechada tem ainda a vantagem de nao poder
-  produzir reflexao, que para rosto nunca e desejada.
+  A forma fechada equivale ao Umeyama via SVD para este caso e tem a
+  vantagem de nao poder produzir reflexao, que para rosto nunca e desejada.
 }
 
 interface

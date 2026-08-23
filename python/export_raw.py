@@ -1,9 +1,8 @@
 """
 Exporta variantes com end2end=False.
 
-Todo export oficial de YOLO26 sai NMS-free ([1,300,C]), entao o caminho de
-decode cru + NMS do ONNXDemo nunca era exercitado. Estes modelos existem
-exatamente para cobrir esse caminho:
+Por padrao o YOLO26 sai NMS-free ([1,300,C]). Estes modelos produzem a saida
+crua, exercitando o caminho de decode + NMS do ONNXDemo:
 
     detect  -> [1, 4+nc, N]        -> ApplyNms
     segment -> [1, 4+nc+32, N]     -> ApplyNms

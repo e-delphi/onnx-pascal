@@ -26,7 +26,7 @@ run() {
 }
 
 echo "═════════════════════════════════════════════════════════════"
-echo " Regressao ONNXDemo — modelos reexportados"
+echo " Regressao ONNXDemo"
 echo "═════════════════════════════════════════════════════════════"
 
 run "detect   / bus.jpg"    "bus.*9[0-9],"      yolo/yolo26x.onnx      imagem/bus.jpg    --out=saida/t_detect.png

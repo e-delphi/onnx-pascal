@@ -85,8 +85,8 @@ type
   { Convencao de classificadores ImageNet: redimensiona o lado menor,
     recorta no centro e normaliza com media/desvio por canal.
 
-    Com AMultiCrop = True executa 5 passadas (centro + 4 cantos), que e o
-    esquema de test time augmentation usado na versao original do projeto. }
+    Com AMultiCrop = True executa 5 passadas (centro + 4 cantos), o
+    esquema classico de test time augmentation para classificacao. }
   TCropClassifierPreprocessor = class(TInterfacedObject, IImagePreprocessor)
   private
     FMean: array[0..2] of Single;

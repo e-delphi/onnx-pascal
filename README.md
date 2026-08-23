@@ -117,10 +117,10 @@ supressão de não-máximos):
 cd python && .venv/Scripts/python export_raw.py
 ```
 
-> **Não existe `.onnx` oficial de YOLO26.** A Ultralytics distribui só `.pt`.
-> Todo `.onnx` que se encontra pronto na internet é export de terceiro — e um
-> deles, testado aqui, declarava `end2end=True` mas emitia a cabeça crua em 9
-> tensores, inutilizável. Exporte você mesmo.
+> **Não existe `.onnx` oficial de YOLO26.** A Ultralytics distribui só `.pt`,
+> então qualquer `.onnx` pronto encontrado na internet é export de terceiro,
+> sem garantia de que os argumentos e o formato de saída sejam os esperados.
+> Exporte você mesmo.
 >
 > **Atenção:** `.pt` é pickle do Python e **executa código ao carregar**. Baixe
 > apenas das fontes oficiais. O `.onnx` é protobuf, só dado — risco bem menor.
@@ -273,9 +273,8 @@ primeiras posições do vetor), gerados pela implementação Python, estão em
 ```
 
 Os scripts em `python/` não fazem parte do produto: servem para gerar os
-modelos e para **derivar empiricamente o formato das saídas** antes de portar
-qualquer coisa para Delphi. Foi assim que se descobriu que a cabeça OBB emite
-`cx,cy,w,h` enquanto detect/segment/pose emitem `x1,y1,x2,y2`.
+modelos e para inspecionar o formato real das saídas de uma cabeça — útil ao
+escrever ou ajustar um decoder.
 
 A arquitetura interna, o mapeamento SOLID e as decisões de projeto estão em
 [delphi/README.md](delphi/README.md).

@@ -57,16 +57,6 @@ src/
 - **DIP** — `TVisionPredictor` recebe sessão, preprocessor, decoder e loader
   pelo construtor. A escolha concreta vive só em `TVisionPredictorFactory`.
 
-Dois episódios em que isso pagou:
-
-- Ao descobrir que a cabeça OBB emite `cx,cy,w,h` e não `x1,y1,x2,y2`, a
-  correção foram **4 linhas em 1 arquivo**. Nenhum outro decoder, nem o
-  predictor, nem a sessão, nem o renderizador foram tocados.
-- O pipeline facial encadeia **dois modelos**, mas não exigiu mecânica nova:
-  detector e embedder são dois `IVisionPredictor` comuns com um `IFaceAligner`
-  no meio. A normalização do ArcFace `(x−127.5)/127.5` caiu exata no
-  `TCropClassifierPreprocessor` que já existia, com média 0,5 e desvio 0,5.
-
 ## Detecção de formato em tempo de execução
 
 Nada de configuração: o layout é decidido pelo shape real do tensor.
@@ -87,8 +77,7 @@ canais-primeiro (`dim1 < dim2`), decodificada é linhas-primeiro. Uma verificaç
 extra exige que as linhas caibam em `max_det`, para descartar o caso degenerado
 de um modelo cru com pouquíssimas classes.
 
-**Formatos que diferem entre cabeças** — todos verificados contra a saída real,
-não deduzidos da documentação:
+**Formatos que diferem entre cabeças:**
 
 - `detect`, `segment` e `pose` emitem a caixa em **cantos** `x1,y1,x2,y2`
 - `obb` emite em **centro** `cx,cy,w,h`. Faz sentido: para uma caixa rotacionada
@@ -106,40 +95,16 @@ modelos.
 
 A transformada tem 4 graus de liberdade, então 5 pares de pontos
 sobredeterminam o sistema e a solução de mínimos quadrados tem forma fechada
-(Procrustes), sem SVD. Conferido contra o Umeyama de referência: diferença
-máxima de 9,5e-7 nos coeficientes, recortes idênticos pixel a pixel e cosseno
-1,0 entre os embeddings. A forma fechada ainda tem a vantagem de **não poder
-produzir reflexão**, que para rosto nunca é desejada.
+(Procrustes), sem SVD. Ela equivale ao Umeyama para este caso e tem a vantagem
+de **não poder produzir reflexão**, que para rosto nunca é desejada.
 
-Separação medida com `buffalo_l`: mesma pessoa ≈ 0,78, pessoas diferentes ≈
-0,00 — margem de 0,80, daí o limiar padrão de 0,40.
+Com `buffalo_l`: mesma pessoa ≈ 0,78, pessoas diferentes ≈ 0,00 — margem de
+0,80, daí o limiar padrão de 0,40.
 
 > Mais landmarks **não** melhoram isso. Com 4 graus de liberdade, 5 pontos já
 > sobredeterminam a transformada; 106 pontos só redistribuiriam o ajuste para
 > regiões que o template canônico nem define. Pontos extras servem para outras
 > coisas — pose de cabeça, malha 3D, recorte preciso.
-
-## Correções em relação à versão original
-
-- `SetLength(AverageOutput, 1000)` era fixo: estourava o array em qualquer
-  modelo que não tivesse exatamente 1000 classes.
-- `StretchDraw` da VCL não interpola; trocado por resample bilinear com
-  alinhamento por centro de pixel (mesma convenção do `cv2.resize`).
-- Imagens menores que 256 px no lado menor geravam `MaxLeft`/`MaxTop`
-  negativos e `ScanLine` fora dos limites.
-- PNG/GIF com transparência eram desenhados sobre lixo de memória.
-- Logits eram impressos como se fossem score; agora há softmax quando a saída
-  não é um vetor de probabilidade.
-- `224`, `1000` e as constantes de normalização estavam hard-coded no `.dpr`.
-- A sessão suportava um input e um output só — segmentação era impossível.
-- Saídas `INT64`/`FLOAT16`/`INT32` causavam leitura de lixo.
-- Os handles ORT em `Run` vazavam se o `Run` falhasse no meio.
-- Os `Cast*` por slot numérico viraram uma tabela tipada resolvida uma vez,
-  conferida contra `onnxruntime_c_api.h` 1.28.1 (424 slots).
-- `ExtractFilePath` trunca no lugar errado quando o caminho vem com `/`: a
-  imagem anotada ia parar na pasta do executável.
-- `%+.4f` não existe no `Format` do Delphi (o `+` é do printf do C) e fazia o
-  parser abortar, imprimindo a linha truncada sem o número.
 
 ## Limitações conhecidas
 

@@ -5,8 +5,8 @@ unit Vision.Embedding;
 
   Um embedding e um vetor L2-normalizado; a semelhanca entre dois rostos e o
   cosseno entre eles, que para vetores unitarios e o proprio produto escalar.
-  Nas medicoes com buffalo_l / w600k_r50 a mesma pessoa ficou em torno de
-  0,78 e pessoas diferentes perto de 0,00 - dai o limiar padrao de 0,40.
+  Com buffalo_l / w600k_r50, mesma pessoa fica em torno de 0,78 e pessoas
+  diferentes perto de 0,00; o limiar padrao e 0,40.
 
   A galeria e um arquivo de texto: uma linha por rosto, campos separados por
   TAB. Fica grande (cerca de 4 KB por rosto) mas e inspecionavel, diffavel e
@@ -25,7 +25,7 @@ uses
 
 const
   { Limiar de cosseno acima do qual dois vetores sao tratados como a mesma
-    pessoa. Medido com buffalo_l / w600k_r50. }
+    pessoa. Valido para buffalo_l / w600k_r50. }
   DEFAULT_FACE_THRESHOLD = 0.40;
 
   GALLERY_SIGNATURE = '#ONNXDemo-face-gallery';
