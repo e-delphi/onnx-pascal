@@ -36,6 +36,10 @@ run "obb      / boats.jpg"  "orientada: centro" yolo/x/yolo26x-obb.onnx  imagem/
 run "classify / zidane.jpg" "suit"              yolo/l/yolo26l-cls.onnx  imagem/zidane.jpg --no-render
 run "squeezenet / dog.jpg"  "Samoyed"           squeezenet/squeezenet1_1.onnx imagem/dog.jpg --labels=squeezenet/labels.txt --no-render
 run "5-crop   / dog.jpg"    "Samoyed"           squeezenet/squeezenet1_1.onnx imagem/dog.jpg --labels=squeezenet/labels.txt --multi-crop --no-render
+run "texto    / bus.jpg"    "8 linha\(s\) de texto" ocr/PP-OCRv6_medium_det.onnx imagem/bus.jpg --out=saida/t_texto.png
+run "texto    / documento"  "98 linha\(s\) de texto" ocr/PP-OCRv6_medium_det.onnx imagem/ocr_exemplo.png --out=saida/t_documento.png
+run "ocr      / bus.jpg"    "emisiones"          --ocr imagem/bus.jpg
+run "ocr      / documento"  "Markov Entropy Decomposition" --ocr imagem/ocr_exemplo.png
 
 run "face     / obama.jpg"  "score [0-9]+"       --query imagem/obama.jpg
 echo "─────────────────────────────────────────────────────────────"

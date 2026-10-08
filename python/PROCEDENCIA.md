@@ -44,6 +44,22 @@ Modelos faciais: `buffalo_l.zip` do release **v0.7** de
 `github.com/deepinsight/insightface`,
 sha256 `80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f`.
 
+Detector de texto: `inference.onnx` de
+`huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx`, salvo como
+`ocr/PP-OCRv6_medium_det.onnx` (62 MB, opset 14, Apache-2.0),
+sha256 `eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1`.
+É export oficial da PaddlePaddle — não precisa de reexport.
+
+Reconhecedor: `inference.onnx` e `inference.yml` de
+`huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx`, salvos como
+`ocr/PP-OCRv6_medium_rec.onnx` (77 MB, Apache-2.0) e
+`ocr/PP-OCRv6_medium_rec.yml` (dicionário de 18.708 caracteres).
+
+| arquivo | sha256 |
+|---|---|
+| `PP-OCRv6_medium_rec.onnx` | `9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba` |
+| `PP-OCRv6_medium_rec.yml` | `991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129` |
+
 > `.pt` é pickle do Python: **executa código ao carregar**. Baixe só das fontes
 > oficiais (releases acima ou `huggingface.co/Ultralytics/YOLO26`). `.onnx` é
 > protobuf, só dado — risco muito menor.

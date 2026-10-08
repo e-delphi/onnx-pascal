@@ -102,6 +102,9 @@ begin
 
   if Value.Task = vtClassify then
     ReportClassification(Value)
+  else if Value.Task = vtTextRec then
+    Writeln(Format('Texto lido   : "%s"  (confianca %.2f%%)',
+      [Value.Text, Value.TextScore * 100]))
   else
     ReportDetections(Value);
 end;
@@ -134,7 +137,11 @@ begin
     Exit;
   end;
 
-  Writeln(Format('%d objeto(s):', [Length(Value.Detections)]));
+  if Value.Task = vtText then
+    Writeln(Format('%d linha(s) de texto, em ordem de leitura:',
+      [Length(Value.Detections)]))
+  else
+    Writeln(Format('%d objeto(s):', [Length(Value.Detections)]));
   for I := 0 to High(Value.Detections) do
   begin
     Detection := Value.Detections[I];

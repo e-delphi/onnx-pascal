@@ -21,9 +21,11 @@ uses
   System.Generics.Collections,
   ONNX.Types,
   Vision.Types,
+  Vision.Preprocess,
   Vision.Predictor,
   Vision.Embedding,
-  Vision.Face;
+  Vision.Face,
+  Vision.Ocr;
 
 type
   EOptionsError = class(Exception);
@@ -33,7 +35,8 @@ type
     amFaceEnroll,     // cadastra um rosto na galeria
     amFaceQuery,      // consulta uma foto contra a galeria
     amFaceCompare,    // compara duas fotos diretamente
-    amGalleryList     // lista o conteudo da galeria
+    amGalleryList,    // lista o conteudo da galeria
+    amOcr             // detecta e le o texto de uma imagem
   );
 
   TAppOptions = record
@@ -53,6 +56,11 @@ type
     AlignedDir: string;
     FaceThreshold: Single;
 
+    OcrDetectPath: string;
+    OcrRecognizePath: string;
+    OcrDictionaryPath: string;
+    OcrTextPath: string;
+
     Render: Boolean;
     Verbose: Boolean;
     Pause: Boolean;
@@ -61,6 +69,7 @@ type
 
     Predictor: TPredictorOptions;
     Face: TFaceOptions;
+    Ocr: TOcrOptions;
     Session: TSessionConfig;
   end;
 
@@ -124,6 +133,7 @@ begin
     '     ONNXDemo.exe --query <imagem> [--gallery=ARQ]' + sLineBreak +
     '     ONNXDemo.exe --compare <imagem1> <imagem2>' + sLineBreak +
     '     ONNXDemo.exe --list [--gallery=ARQ]' + sLineBreak +
+    '     ONNXDemo.exe --ocr <imagem>' + sLineBreak +
     sLineBreak +
     'INFERENCIA' + sLineBreak +
     '  Modelo e imagem sao obrigatorios. O argumento terminado em .onnx e' + sLineBreak +
@@ -134,10 +144,12 @@ begin
     '  --labels=ARQ     rotulos, um por linha; usado so quando o modelo nao' + sLineBreak +
     '                   traz os nomes nos metadados. Sem esta opcao, procura' + sLineBreak +
     '                   labels.txt na pasta do executavel.' + sLineBreak +
-    '  --task=T         forca: classify, detect, segment, pose, obb, face, embed' + sLineBreak +
-    '  --conf=N         limiar de confianca (padrao 0.25; 0 em classificacao)' + sLineBreak +
+    '  --task=T         forca: classify, detect, segment, pose, obb, face,' + sLineBreak +
+    '                   embed, text' + sLineBreak +
+    '  --conf=N         limiar de confianca (padrao 0.25; 0 em classificacao;' + sLineBreak +
+    '                   0.45 em texto)' + sLineBreak +
     '  --iou=N          limiar de IoU do NMS (padrao 0.45)' + sLineBreak +
-    '  --max-det=N      maximo de deteccoes (padrao 300)' + sLineBreak +
+    '  --max-det=N      maximo de deteccoes (padrao 300; 3000 em texto)' + sLineBreak +
     '  --topk=N         classes listadas em classificacao (padrao 5)' + sLineBreak +
     '  --mask-thr=N     limiar da mascara em segmentacao (padrao 0.5)' + sLineBreak +
     '  --agnostic       NMS sem separar por classe' + sLineBreak +
@@ -146,6 +158,21 @@ begin
     '  --out=ARQ        salva a imagem anotada num caminho especifico' + sLineBreak +
     '  --out-dir=DIR    pasta das saidas geradas (padrao: saida/)' + sLineBreak +
     '  --no-render      nao gera imagem anotada' + sLineBreak +
+    sLineBreak +
+    'TEXTO (detectores PaddleOCR / DBNet, ex.: PP-OCRv6_medium_det)' + sLineBreak +
+    '  --db-thr=N       limiar que binariza o mapa de texto (padrao 0.2)' + sLineBreak +
+    '  --unclip=N       expansao das caixas sobre o mapa (padrao 1.4)' + sLineBreak +
+    '  --det-side=N     limite de lado no redimensionamento (padrao 736)' + sLineBreak +
+    '  --det-limit=L    min: lado menor >= limite (padrao, mais preciso)' + sLineBreak +
+    '                   max: lado maior <= limite (mais rapido)' + sLineBreak +
+    sLineBreak +
+    'OCR (detector + reconhecedor PaddleOCR; nao usa --model)' + sLineBreak +
+    '  --ocr            detecta e le o texto da imagem; grava _ocr.png e _ocr.txt' + sLineBreak +
+    '  --ocr-det=ARQ    detector (padrao: ocr/PP-OCRv6_medium_det.onnx)' + sLineBreak +
+    '  --ocr-rec=ARQ    reconhecedor (padrao: ocr/PP-OCRv6_medium_rec.onnx)' + sLineBreak +
+    '  --ocr-dict=ARQ   dicionario (padrao: o .yml ao lado do reconhecedor)' + sLineBreak +
+    '  --rec-thr=N      descarta linhas lidas com confianca menor (padrao 0)' + sLineBreak +
+    '  As opcoes de TEXTO acima valem para o detector.' + sLineBreak +
     sLineBreak +
     'ROSTOS (encadeia detector + embedding; nao usa --model)' + sLineBreak +
     '  --enroll=NOME    cadastra na galeria o maior rosto da imagem' + sLineBreak +
@@ -169,6 +196,8 @@ begin
     'Exemplos:' + sLineBreak +
     '  ONNXDemo.exe yolo26n.onnx foto.jpg' + sLineBreak +
     '  ONNXDemo.exe yolo26n-pose.onnx foto.jpg --conf=0.4 --out=pose.png' + sLineBreak +
+    '  ONNXDemo.exe ocr/PP-OCRv6_medium_det.onnx documento.png' + sLineBreak +
+    '  ONNXDemo.exe --ocr documento.png' + sLineBreak +
     '  ONNXDemo.exe --enroll="Eduardo" eduardo1.jpg' + sLineBreak +
     '  ONNXDemo.exe --query desconhecido.jpg --face-thr=0.45' + sLineBreak +
     '  ONNXDemo.exe --compare a.jpg b.jpg';
@@ -180,6 +209,19 @@ begin
   begin
     if Options.ModelPath <> '' then
       Options.ModelPath := ResolvePath(Options.ModelPath);
+  end
+  else if Options.Mode = amOcr then
+  begin
+    if Options.OcrDetectPath = '' then
+      Options.OcrDetectPath := TPath.Combine(BaseDirectory, 'ocr\PP-OCRv6_medium_det.onnx');
+    if Options.OcrRecognizePath = '' then
+      Options.OcrRecognizePath := TPath.Combine(BaseDirectory, 'ocr\PP-OCRv6_medium_rec.onnx');
+    Options.OcrDetectPath := ResolvePath(Options.OcrDetectPath);
+    Options.OcrRecognizePath := ResolvePath(Options.OcrRecognizePath);
+    // O dicionario e o inference.yml do reconhecedor, salvo com o mesmo nome.
+    if Options.OcrDictionaryPath = '' then
+      Options.OcrDictionaryPath := ChangeFileExt(Options.OcrRecognizePath, '.yml');
+    Options.OcrDictionaryPath := ResolvePath(Options.OcrDictionaryPath);
   end
   else
   begin
@@ -226,7 +268,16 @@ begin
   else if Options.Render and (Options.Mode = amPredict) and
           (Options.ImagePath <> '') then
     Options.OutputPath := TPath.Combine(Options.OutputDir,
-      TPath.GetFileNameWithoutExtension(Options.ImagePath) + '_pred.png');
+      TPath.GetFileNameWithoutExtension(Options.ImagePath) + '_pred.png')
+  else if Options.Render and (Options.Mode = amOcr) and
+          (Options.ImagePath <> '') then
+    Options.OutputPath := TPath.Combine(Options.OutputDir,
+      TPath.GetFileNameWithoutExtension(Options.ImagePath) + '_ocr.png');
+
+  // O texto lido sempre vai para arquivo, ao lado da imagem anotada.
+  if (Options.Mode = amOcr) and (Options.ImagePath <> '') then
+    Options.OcrTextPath := TPath.Combine(Options.OutputDir,
+      TPath.GetFileNameWithoutExtension(Options.ImagePath) + '_ocr.txt');
 
   Options.Predictor.ConfidenceThreshold :=
     Min(1.0, Max(0.0, Options.Predictor.ConfidenceThreshold));
@@ -236,6 +287,10 @@ begin
     Min(1.0, Max(0.0, Options.Predictor.MaskThreshold));
   Options.Predictor.MaxDetections := Max(1, Options.Predictor.MaxDetections);
   Options.Predictor.TopK := Max(1, Options.Predictor.TopK);
+  Options.Predictor.TextBinaryThreshold :=
+    Min(1.0, Max(0.0, Options.Predictor.TextBinaryThreshold));
+  Options.Predictor.TextUnclipRatio := Max(0.0, Options.Predictor.TextUnclipRatio);
+  Options.Predictor.TextLimitSide := Max(32, Options.Predictor.TextLimitSide);
   Options.FaceThreshold := Min(1.0, Max(-1.0, Options.FaceThreshold));
 end;
 
@@ -268,6 +323,10 @@ begin
       if (Options.ImagePath = '') or (Options.SecondImagePath = '') then
         raise EOptionsError.Create('--compare precisa de duas imagens.');
 
+    amOcr:
+      if Options.ImagePath = '' then
+        raise EOptionsError.Create('Informe a imagem a ler.');
+
     amGalleryList:
       ; // so precisa da galeria, que ja tem padrao
   end;
@@ -284,6 +343,7 @@ begin
   Result.Mode := amPredict;
   Result.Predictor := TPredictorOptions.Default;
   Result.Face := TFaceOptions.Default;
+  Result.Ocr := TOcrOptions.Default;
   Result.Session := TSessionConfig.Default;
   Result.FaceThreshold := DEFAULT_FACE_THRESHOLD;
   Result.Render := True;
@@ -354,6 +414,16 @@ begin
         Result.Mode := amFaceCompare
       else if Name = 'list' then
         Result.Mode := amGalleryList
+      else if Name = 'ocr' then
+        Result.Mode := amOcr
+      else if Name = 'ocr-det' then
+        Result.OcrDetectPath := Value
+      else if Name = 'ocr-rec' then
+        Result.OcrRecognizePath := Value
+      else if Name = 'ocr-dict' then
+        Result.OcrDictionaryPath := Value
+      else if Name = 'rec-thr' then
+        Result.Ocr.RecognitionThreshold := ParseFloat(Value, '--rec-thr')
       else if Name = 'remove' then
       begin
         Result.Mode := amGalleryList;
@@ -389,7 +459,25 @@ begin
       else if Name = 'mask-thr' then
         Result.Predictor.MaskThreshold := ParseFloat(Value, '--mask-thr')
       else if Name = 'max-det' then
-        Result.Predictor.MaxDetections := ParseInt(Value, '--max-det')
+      begin
+        Result.Predictor.MaxDetections := ParseInt(Value, '--max-det');
+        Result.Predictor.MaxDetectionsWasSet := True;
+      end
+      else if Name = 'db-thr' then
+        Result.Predictor.TextBinaryThreshold := ParseFloat(Value, '--db-thr')
+      else if Name = 'unclip' then
+        Result.Predictor.TextUnclipRatio := ParseFloat(Value, '--unclip')
+      else if Name = 'det-side' then
+        Result.Predictor.TextLimitSide := ParseInt(Value, '--det-side')
+      else if Name = 'det-limit' then
+      begin
+        if SameText(Value, 'min') then
+          Result.Predictor.TextLimitType := tlMin
+        else if SameText(Value, 'max') then
+          Result.Predictor.TextLimitType := tlMax
+        else
+          raise EOptionsError.CreateFmt('Valor invalido para --det-limit: "%s"', [Value]);
+      end
       else if Name = 'topk' then
         Result.Predictor.TopK := ParseInt(Value, '--topk')
       else if Name = 'threads' then

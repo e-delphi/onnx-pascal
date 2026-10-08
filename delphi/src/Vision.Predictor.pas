@@ -35,6 +35,7 @@ type
     ConfidenceWasSet: Boolean;
     IoUThreshold: Single;
     MaxDetections: Integer;
+    MaxDetectionsWasSet: Boolean;
     MaskThreshold: Single;
     TopK: Integer;
     ClassAgnosticNms: Boolean;
@@ -42,6 +43,12 @@ type
     LabelsPath: string;
     MultiCropClassify: Boolean;
     Normalization: TNormalizationChoice;
+    { Deteccao de texto. Os padroes sao os do inference.yml que acompanha o
+      PP-OCRv6_medium_det; o .onnx nao carrega nenhum desses valores. }
+    TextBinaryThreshold: Single;
+    TextUnclipRatio: Single;
+    TextLimitSide: Integer;
+    TextLimitType: TTextLimitType;
     class function Default: TPredictorOptions; static;
   end;
 
@@ -100,6 +107,7 @@ begin
   Result.ConfidenceWasSet := False;
   Result.IoUThreshold := 0.45;
   Result.MaxDetections := 300;
+  Result.MaxDetectionsWasSet := False;
   Result.MaskThreshold := 0.5;
   Result.TopK := 5;
   Result.ClassAgnosticNms := False;
@@ -107,6 +115,10 @@ begin
   Result.LabelsPath := '';
   Result.MultiCropClassify := False;
   Result.Normalization := ncAuto;
+  Result.TextBinaryThreshold := 0.2;
+  Result.TextUnclipRatio := 1.4;
+  Result.TextLimitSide := 736;
+  Result.TextLimitType := tlMin;
 end;
 
 { TVisionPredictor }
@@ -166,6 +178,8 @@ begin
   Result.MaskThreshold := FOptions.MaskThreshold;
   Result.TopK := FOptions.TopK;
   Result.ClassAgnosticNms := FOptions.ClassAgnosticNms;
+  Result.BinaryThreshold := FOptions.TextBinaryThreshold;
+  Result.UnclipRatio := FOptions.TextUnclipRatio;
 end;
 
 function TVisionPredictor.PredictFile(const FileName: string): TVisionResult;
@@ -314,6 +328,13 @@ end;
 class function TVisionPredictorFactory.ChoosePreprocessor(const ASpec: TModelSpec;
   const AOptions: TPredictorOptions): IImagePreprocessor;
 begin
+  if ASpec.Task = vtText then
+    Exit(TTextDetPreprocessor.Create(AOptions.TextLimitSide,
+      AOptions.TextLimitType));
+
+  if ASpec.Task = vtTextRec then
+    Exit(TTextRecPreprocessor.Create);
+
   if ASpec.Task <> vtClassify then
     Exit(TLetterboxPreprocessor.Create);
 
@@ -359,11 +380,27 @@ begin
   if not TDecoderRegistry.IsSupported(Spec.Task) then
     raise EDecodeError.CreateFmt(
       'Tarefa "%s" nao suportada. Use --task para forcar detect, segment, ' +
-      'pose, obb ou classify.', [VisionTaskToString(Spec.Task)]);
+      'pose, obb, classify, text ou rec.', [VisionTaskToString(Spec.Task)]);
+
+  // O reconhecedor sem dicionario so produziria indices.
+  if (Spec.Task = vtTextRec) and (Spec.ClassCount = 0) then
+    raise EDecodeError.Create(
+      'O reconhecedor precisa do dicionario de caracteres: informe o ' +
+      'inference.yml do modelo em --labels.');
 
   // Em classificacao o limiar padrao de deteccao esconderia o top-K inteiro.
   if (Spec.Task = vtClassify) and (not Effective.ConfidenceWasSet) then
     Effective.ConfidenceThreshold := 0;
+
+  // Texto: --conf e o box_thresh do DB (0.45) e --max-det o max_candidates
+  // (3000). Uma pagina de documento passa facil das 300 linhas.
+  if Spec.Task = vtText then
+  begin
+    if not Effective.ConfidenceWasSet then
+      Effective.ConfidenceThreshold := 0.45;
+    if not Effective.MaxDetectionsWasSet then
+      Effective.MaxDetections := 3000;
+  end;
 
   Preprocessor := ChoosePreprocessor(Spec, Effective);
   Decoder := TDecoderRegistry.CreateFor(Spec.Task);

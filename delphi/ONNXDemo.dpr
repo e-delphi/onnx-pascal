@@ -7,6 +7,7 @@ program ONNXDemo;
 {$R *.res}
 
 uses
+  Winapi.Windows,
   System.SysUtils,
   System.IOUtils,
   ONNX.CApi in 'src\ONNX.CApi.pas',
@@ -28,13 +29,19 @@ uses
   Vision.Decoder.Obb in 'src\Vision.Decoder.Obb.pas',
   Vision.Decoder.Scrfd in 'src\Vision.Decoder.Scrfd.pas',
   Vision.Decoder.Embed in 'src\Vision.Decoder.Embed.pas',
+  Vision.Decoder.Text in 'src\Vision.Decoder.Text.pas',
+  Vision.Decoder.Ctc in 'src\Vision.Decoder.Ctc.pas',
   Vision.Predictor in 'src\Vision.Predictor.pas',
   Vision.Embedding in 'src\Vision.Embedding.pas',
   Vision.Face.Align in 'src\Vision.Face.Align.pas',
   Vision.Face in 'src\Vision.Face.pas',
+  Vision.Ocr.Crop in 'src\Vision.Ocr.Crop.pas',
+  Vision.Ocr in 'src\Vision.Ocr.pas',
   Vision.Render in 'src\Vision.Render.pas',
   Vision.Report in 'src\Vision.Report.pas',
   Vision.Report.Face in 'src\Vision.Report.Face.pas',
+  Vision.Render.Ocr in 'src\Vision.Render.Ocr.pas',
+  Vision.Report.Ocr in 'src\Vision.Report.Ocr.pas',
   App.Options in 'src\App.Options.pas';
 
 { ---------------------------------------------------------------- inferencia }
@@ -65,7 +72,8 @@ begin
   Reporter.ReportResult(Prediction);
 
   if Options.Render and (Options.OutputPath <> '') and
-     (Prediction.Task <> vtClassify) and (Prediction.Task <> vtEmbed) then
+     (Prediction.Task <> vtClassify) and (Prediction.Task <> vtEmbed) and
+     (Prediction.Task <> vtTextRec) then
   begin
     Renderer := TResultRenderer.Create;
     Annotated := Renderer.Render(Image, Prediction);
@@ -211,6 +219,56 @@ begin
   Writeln('Arquivo: ', Options.GalleryPath);
 end;
 
+{ ------------------------------------------------------------------------ ocr }
+
+procedure RunOcr(const Options: TAppOptions; const Runtime: IONNXRuntime);
+var
+  Engine: IOcrEngine;
+  Reporter: IOcrReporter;
+  Renderer: IOcrRenderer;
+  Loader: IImageLoader;
+  Image: IImage;
+  Value: TOcrResult;
+begin
+  if not FileExists(Options.ImagePath) then
+    raise Exception.CreateFmt('Imagem nao encontrada: %s', [Options.ImagePath]);
+  if not FileExists(Options.OcrDetectPath) then
+    raise Exception.CreateFmt(
+      'Detector de texto nao encontrado: %s'#13#10 +
+      'Baixe PP-OCRv6_medium_det (passo 7 do README) ou informe --ocr-det=ARQ.',
+      [Options.OcrDetectPath]);
+  if not FileExists(Options.OcrRecognizePath) then
+    raise Exception.CreateFmt(
+      'Reconhecedor nao encontrado: %s'#13#10 +
+      'Baixe PP-OCRv6_medium_rec (passo 7 do README) ou informe --ocr-rec=ARQ.',
+      [Options.OcrRecognizePath]);
+
+  Writeln('Imagem : ', Options.ImagePath);
+
+  Reporter := TOcrConsoleReporter.Create(Options.Verbose);
+  Engine := TOcrEngineFactory.Build(Runtime, Options.OcrDetectPath,
+    Options.OcrRecognizePath, Options.OcrDictionaryPath, Options.Predictor,
+    Options.Ocr, Options.Session);
+  Reporter.ReportEngine(Engine);
+
+  Loader := TVclImageLoader.Create;
+  Image := Loader.Load(Options.ImagePath);
+
+  Value := Engine.Read(Image);
+  Reporter.ReportResult(Value);
+
+  Reporter.SaveText(Value, Options.OcrTextPath);
+  Writeln;
+  Writeln('Texto        : ', Options.OcrTextPath);
+
+  if Options.Render and (Options.OutputPath <> '') then
+  begin
+    Renderer := TOcrRenderer.Create;
+    SaveImageToFile(Renderer.Render(Image, Value), Options.OutputPath);
+    Writeln('Imagem anotada: ', Options.OutputPath);
+  end;
+end;
+
 { ----------------------------------------------------------------------- main }
 
 procedure Run;
@@ -218,6 +276,10 @@ var
   Options: TAppOptions;
   Runtime: IONNXRuntime;
 begin
+  // Texto lido (OCR) tem acentos e ideogramas; o console OEM os estragaria.
+  SetConsoleOutputCP(CP_UTF8);
+  SetTextCodePage(Output, CP_UTF8);
+
   Options := TCommandLineParser.Parse;
 
   if Options.ShowHelp then
@@ -256,6 +318,9 @@ begin
 
     amFaceCompare:
       RunFaceCompare(Options, Runtime);
+
+    amOcr:
+      RunOcr(Options, Runtime);
   end;
 
   Writeln;

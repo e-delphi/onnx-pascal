@@ -61,6 +61,10 @@ type
     MaskThreshold: Single;
     TopK: Integer;
     ClassAgnosticNms: Boolean;
+    { Deteccao de texto (DBNet): limiar que binariza o mapa de probabilidade
+      e fator de expansao do poligono encolhido que a rede aprende. }
+    BinaryThreshold: Single;
+    UnclipRatio: Single;
   end;
 
   IResultDecoder = interface

@@ -23,7 +23,9 @@ type
     vtPose,       // detect + keypoints          -> caixas + esqueleto
     vtObb,        // detect + angulo             -> caixas rotacionadas
     vtFace,       // SCRFD: 9 saidas             -> caixas + 5 landmarks
-    vtEmbed       // [1, D]                      -> vetor de identidade
+    vtEmbed,      // [1, D]                      -> vetor de identidade
+    vtText,       // DBNet: [1, 1, H, W]         -> linhas de texto (quadrilateros)
+    vtTextRec     // CTC: [1, T, 1+chars+1]      -> texto de uma linha recortada
   );
 
   TBoxF = record
@@ -104,6 +106,10 @@ type
     Classes: TClassScores;
     { Preenchido pela tarefa vtEmbed: vetor ja L2-normalizado. }
     Embedding: TArray<Single>;
+    { Preenchidos pela tarefa vtTextRec: texto lido e media da confianca dos
+      caracteres mantidos pelo CTC (0 quando nada foi lido). }
+    Text: string;
+    TextScore: Single;
     PreprocessMs: Double;
     InferenceMs: Double;
     PostprocessMs: Double;
@@ -300,6 +306,8 @@ function TVisionResult.Count: Integer;
 begin
   if Task = vtEmbed then
     Result := Length(Embedding)
+  else if Task = vtTextRec then
+    Result := Length(Text)
   else if Task = vtClassify then
     Result := Length(Classes)
   else
@@ -318,6 +326,8 @@ begin
     vtObb:      Result := 'obb';
     vtFace:     Result := 'face';
     vtEmbed:    Result := 'embed';
+    vtText:     Result := 'text';
+    vtTextRec:  Result := 'rec';
   else
     Result := 'unknown';
   end;
@@ -342,6 +352,10 @@ begin
     Result := vtFace
   else if (V = 'embed') or (V = 'embedding') or (V = 'arcface') then
     Result := vtEmbed
+  else if (V = 'text') or (V = 'textdet') or (V = 'ocr') or (V = 'db') then
+    Result := vtText
+  else if (V = 'rec') or (V = 'textrec') or (V = 'ctc') then
+    Result := vtTextRec
   else
     Result := vtUnknown;
 end;

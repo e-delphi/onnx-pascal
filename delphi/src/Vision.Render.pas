@@ -274,6 +274,11 @@ begin
       if Detection.HasKeypoints then
         DrawKeypoints(Bitmap.Canvas, Detection);
 
+      // Uma pagina tem centenas de linhas: rotulo em cada uma cobriria o
+      // proprio texto detectado. O relatorio de console traz os scores.
+      if Value.Task = vtText then
+        Continue;
+
       Text := Format('%s %.0f%%', [Detection.DisplayName, Detection.Score * 100]);
       DrawLabel(Bitmap.Canvas, Round(Detection.Box.Left),
         Round(Detection.Box.Top), Text, Color);

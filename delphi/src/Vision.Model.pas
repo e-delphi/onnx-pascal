@@ -64,6 +64,7 @@ type
 function ParseNamesMap(const Text: string): TArray<string>;
 function ParseIntList(const Text: string): TArray<Integer>;
 function LoadLabelsFile(const FileName: string): TArray<string>;
+function LoadPaddleCharacterDict(const Lines: TArray<string>): TArray<string>;
 
 implementation
 
@@ -84,6 +85,15 @@ end;
 
 function TModelSpec.Summary: string;
 begin
+  // O detector de texto redimensiona cada imagem por conta propria: o
+  // 640x640 assumido para entradas dinamicas nao se aplica.
+  if Task = vtText then
+    Exit(Format('tarefa=%s  entrada=dinamica (multiplos de 32)',
+      [VisionTaskToString(Task)]));
+  if Task = vtTextRec then
+    Exit(Format('tarefa=%s  entrada=altura %d, largura dinamica  caracteres=%d',
+      [VisionTaskToString(Task), InputHeight, ClassCount]));
+
   Result := Format('tarefa=%s  entrada=%dx%d  classes=%d',
     [VisionTaskToString(Task), InputWidth, InputHeight, ClassCount]);
   if Task = vtPose then
@@ -231,6 +241,45 @@ begin
   end;
 end;
 
+{ Dicionario de caracteres dos reconhecedores PaddleOCR: a lista
+  PostProcess.character_dict do inference.yml, um item por linha no formato
+  "  - X". Caracteres especiais do YAML vem entre aspas simples, com '' como
+  escape ('''' e o apostrofo). Conferido contra o PyYAML nas 18.708 entradas
+  do PP-OCRv6_medium_rec. Nada e aparado: o proprio espaco e um caractere. }
+function LoadPaddleCharacterDict(const Lines: TArray<string>): TArray<string>;
+const
+  ITEM_PREFIX = '  - ';
+var
+  List: TList<string>;
+  I: Integer;
+  Inside: Boolean;
+  Value: string;
+begin
+  List := TList<string>.Create;
+  try
+    Inside := False;
+    for I := 0 to High(Lines) do
+    begin
+      if not Inside then
+      begin
+        Inside := Trim(Lines[I]) = 'character_dict:';
+        Continue;
+      end;
+
+      if not Lines[I].StartsWith(ITEM_PREFIX) then
+        Break;
+
+      Value := Lines[I].Substring(Length(ITEM_PREFIX));
+      if (Length(Value) >= 2) and Value.StartsWith('''') and Value.EndsWith('''') then
+        Value := Value.Substring(1, Length(Value) - 2).Replace('''''', '''');
+      List.Add(Value);
+    end;
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
 function LoadLabelsFile(const FileName: string): TArray<string>;
 var
   Lines: TArray<string>;
@@ -245,6 +294,11 @@ begin
   except
     Lines := TFile.ReadAllLines(FileName);
   end;
+
+  // inference.yml de um reconhecedor PaddleOCR: os rotulos sao o dicionario.
+  if SameText(ExtractFileExt(FileName), '.yml') or
+     SameText(ExtractFileExt(FileName), '.yaml') then
+    Exit(LoadPaddleCharacterDict(Lines));
 
   SetLength(Result, Length(Lines));
   for I := 0 to High(Lines) do
@@ -322,6 +376,12 @@ begin
 
   if (Rank3Count = 0) and (Rank2Count > 0) then
     Exit(vtClassify);
+
+  // Mapa de probabilidade de um canal so, do tamanho da entrada: e a saida
+  // do DBNet (detectores de texto PaddleOCR), que nao traz metadados.
+  if (Rank3Count = 0) and (Rank4Count = 1) and (Session.OutputCount = 1) and
+     (Session.OutputInfo(0).Dim(1) = 1) then
+    Exit(vtText);
 
   if Rank3Count = 0 then
     Exit(vtUnknown);

@@ -187,13 +187,19 @@
         <DCCReference Include="src\Vision.Decoder.Obb.pas"/>
         <DCCReference Include="src\Vision.Decoder.Scrfd.pas"/>
         <DCCReference Include="src\Vision.Decoder.Embed.pas"/>
+        <DCCReference Include="src\Vision.Decoder.Text.pas"/>
+        <DCCReference Include="src\Vision.Decoder.Ctc.pas"/>
         <DCCReference Include="src\Vision.Predictor.pas"/>
         <DCCReference Include="src\Vision.Embedding.pas"/>
         <DCCReference Include="src\Vision.Face.Align.pas"/>
         <DCCReference Include="src\Vision.Face.pas"/>
+        <DCCReference Include="src\Vision.Ocr.Crop.pas"/>
+        <DCCReference Include="src\Vision.Ocr.pas"/>
         <DCCReference Include="src\Vision.Render.pas"/>
         <DCCReference Include="src\Vision.Report.pas"/>
         <DCCReference Include="src\Vision.Report.Face.pas"/>
+        <DCCReference Include="src\Vision.Render.Ocr.pas"/>
+        <DCCReference Include="src\Vision.Report.Ocr.pas"/>
         <DCCReference Include="src\App.Options.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
