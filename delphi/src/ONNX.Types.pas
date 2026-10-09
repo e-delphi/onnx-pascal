@@ -46,12 +46,21 @@ type
 
   TTensorArray = TArray<TTensor>;
 
+  { Onde a sessao executa. DirectML usa qualquer GPU DirectX 12 (AMD,
+    NVIDIA, Intel) e exige uma onnxruntime.dll compilada com ele - a do
+    pacote Windows ML, por exemplo. }
+  TExecutionProvider = (epCpu, epDirectML);
+
   TSessionConfig = record
     GraphOptimizationLevel: Integer;
     ExecutionMode: Integer;
     IntraOpThreads: Integer;
     InterOpThreads: Integer;
+    Provider: TExecutionProvider;
+    { Indice do adaptador DirectX (0 = GPU padrao do sistema). }
+    DeviceId: Integer;
     class function Default: TSessionConfig; static;
+    function Describe: string;
   end;
 
   IONNXSession = interface
@@ -78,7 +87,10 @@ type
   IONNXRuntime = interface
     ['{6F5D9A44-3E1C-4C58-8F2B-7A6E4C93B022}']
     function Version: string;
+    { Versao da C API negociada com a DLL (28 na 1.28, 27 na 1.27...). }
+    function ApiVersion: Integer;
     function AvailableProviders: TArray<string>;
+    function SupportsDirectML: Boolean;
     function CreateSession(const ModelPath: string): IONNXSession; overload;
     function CreateSession(const ModelPath: string;
       const Config: TSessionConfig): IONNXSession; overload;
@@ -92,6 +104,8 @@ type
     function Env: POrtEnv;
     function Allocator: POrtAllocator;
     procedure Check(Status: POrtStatus; const Operation: string);
+    { Nil quando a DLL nao foi compilada com DirectML. }
+    function AppendDirectML: TOrtAppendDirectML;
     { Copia a string alocada pelo ORT e devolve a memoria ao alocador. }
     function ConsumeString(P: PAnsiChar): string;
   end;
@@ -203,6 +217,17 @@ begin
   Result.ExecutionMode := ORT_SEQUENTIAL;
   Result.IntraOpThreads := 0; // 0 = deixa o ORT decidir
   Result.InterOpThreads := 0;
+  Result.Provider := epCpu;
+  Result.DeviceId := 0;
+end;
+
+function TSessionConfig.Describe: string;
+begin
+  case Provider of
+    epDirectML: Result := Format('GPU (DirectML, adaptador %d)', [DeviceId]);
+  else
+    Result := 'CPU';
+  end;
 end;
 
 { HalfToSingle }

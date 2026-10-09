@@ -106,6 +106,8 @@ begin
 end;
 
 procedure TONNXSession.ApplyConfig(const Config: TSessionConfig);
+var
+  AppendDirectML: TOrtAppendDirectML;
 begin
   FCore.Check(
     FCore.Api^.SetGraphOptimizationLevel(FOptions, Config.GraphOptimizationLevel),
@@ -124,6 +126,24 @@ begin
     FCore.Check(
       FCore.Api^.SetInterOpNumThreads(FOptions, Config.InterOpThreads),
       'SetInterOpNumThreads');
+
+  if Config.Provider = epDirectML then
+  begin
+    AppendDirectML := FCore.AppendDirectML;
+    if not Assigned(AppendDirectML) then
+      raise EONNXError.Create(
+        'Esta onnxruntime.dll nao tem DirectML. Use a DLL do pacote ' +
+        'Windows ML (ver README) ou rode sem --gpu.');
+
+    { Exigencias do provider DirectML: sem "memory pattern" e execucao
+      sequencial (os buffers de GPU nao podem ser reaproveitados entre
+      nos em paralelo). }
+    FCore.Check(FCore.Api^.DisableMemPattern(FOptions), 'DisableMemPattern');
+    FCore.Check(FCore.Api^.SetExecutionMode(FOptions, ORT_SEQUENTIAL),
+      'SetSessionExecutionMode');
+    FCore.Check(AppendDirectML(FOptions, Config.DeviceId),
+      'SessionOptionsAppendExecutionProvider_DML');
+  end;
 end;
 
 procedure TONNXSession.CacheIoInfo;

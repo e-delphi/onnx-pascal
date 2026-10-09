@@ -61,11 +61,50 @@ Sem PowerShell/curl, baixe manualmente de
 (tag `v1.28.1`, arquivo `onnxruntime-win-x64-1.28.1.zip`) e copie
 `lib/onnxruntime.dll` para `delphi/bin/`.
 
-> **A versão importa.** `delphi/src/ONNX.CApi.pas` declara
-> `ORT_API_VERSION = 28` e mapeia a tabela de 424 slots da struct `OrtApi`,
-> conferida contra o `onnxruntime_c_api.h` da 1.28.1. Uma DLL mais antiga
-> falha na hora com mensagem clara; uma mais nova normalmente funciona,
+> **A versão importa pouco.** `delphi/src/ONNX.CApi.pas` mapeia a tabela da
+> struct `OrtApi` conferida contra o `onnxruntime_c_api.h` da 1.28.1, mas só
+> usa slots que existem desde muito antes. O programa negocia a versão da API
+> com a DLL: aceita da 1.16 em diante, e uma mais nova também funciona,
 > porque a tabela só cresce no fim.
+
+#### Opcional: GPU (DirectML)
+
+O zip acima é só CPU (e a variante `gpu_cuda` serve apenas para NVIDIA). Para
+rodar em **qualquer GPU DirectX 12 — AMD, NVIDIA ou Intel** — use a
+`onnxruntime.dll` do pacote **Windows ML** da Microsoft, que traz o provider
+DirectML embutido:
+
+```bash
+curl -L -o winml.zip https://api.nuget.org/v3-flatcontainer/microsoft.windows.ai.machinelearning/2.4.89/microsoft.windows.ai.machinelearning.2.4.89.nupkg
+```
+
+```bash
+unzip -j winml.zip "runtimes/win-x64/native/onnxruntime.dll" "runtimes/win-x64/native/DirectML.dll" -d delphi/bin/dml/
+```
+
+O `.nupkg` é um zip comum. As duas DLLs vão para a subpasta **`dml/`**, sem
+substituir a do passo anterior: na CPU a build oficial 1.28.1 é ~40% mais
+rápida que a 1.27.1 do Windows ML, então o programa só carrega a de `dml/`
+quando recebe `--gpu`. Acrescente `--gpu` a qualquer comando:
+
+```bash
+./ONNXDemo.exe --ocr imagem/ocr_exemplo.png --gpu
+```
+
+Numa RX 9070 XT, contra a CPU:
+
+| | GPU | CPU |
+|---|---:|---:|
+| YOLO26x, `bus.jpg` (inferência) | 34 ms | 570 ms |
+| OCR completo, `ocr_exemplo.png` (98 linhas) | 3,7 s | 16,1 s |
+
+As saídas coincidem com as da CPU. Sem a DLL certa, `--gpu` avisa e segue na
+CPU.
+
+> **Formatos variáveis custam caro no DirectML.** Ele otimiza o grafo para o
+> primeiro formato de entrada que a sessão vê; formatos novos rodam bem mais
+> devagar. Isso pesa no reconhecedor de texto, cuja largura muda a cada
+> linha — por isso, com `--gpu`, o OCR lê em lotes de 6 (ver `--rec-batch`).
 
 ### 3. Compilar
 
@@ -296,6 +335,14 @@ as caixas ao lado do texto lido, cada um na sua posição.
 | `--ocr-rec` | `ocr/PP-OCRv6_medium_rec.onnx` | reconhecedor |
 | `--ocr-dict` | o `.yml` ao lado do reconhecedor | dicionário de caracteres |
 | `--rec-thr` | 0 | descarta linhas lidas com confiança menor |
+| `--rec-batch` | 6 com `--gpu`, 1 na CPU | linhas por execução do reconhecedor |
+
+O pipeline oficial do PaddleX lê as linhas em lotes de 6, ordenadas pela
+proporção, com padding até a mais larga do lote. Como o reconhecedor olha a
+linha inteira, esse padding muda a leitura de uma linha ou outra (1 em 98 no
+documento de exemplo): `--rec-batch=6` reproduz o PaddleOCR de fábrica,
+`--rec-batch=1` lê cada linha isolada. Na GPU os lotes são ~3× mais rápidos;
+na CPU são mais lentos, daí o padrão diferente.
 
 As opções de detecção de texto da tabela anterior também valem aqui.
 
@@ -420,8 +467,11 @@ A arquitetura interna, o mapeamento SOLID e as decisões de projeto estão em
 **`Nao foi possivel carregar onnxruntime.dll (erro Win32 126)`**
 A DLL não está ao lado do `.exe`. Refaça o passo 2.
 
-**`A DLL nao suporta a ONNX Runtime C API versao 28`**
-DLL anterior à 1.28. Baixe a versão certa.
+**`onnxruntime.dll ... e antiga demais`**
+DLL anterior à 1.16. Baixe a do passo 2.
+
+**`AVISO: esta onnxruntime.dll ... nao tem DirectML`**
+`--gpu` com a DLL só-CPU. Use a do Windows ML (passo 2, "Opcional: GPU").
 
 **`Tarefa "unknown" nao suportada`**
 O `.onnx` não traz metadados e o formato não foi dedutível. Force com

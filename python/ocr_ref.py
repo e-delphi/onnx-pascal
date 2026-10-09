@@ -22,7 +22,10 @@ O reconhecimento (PP-OCRv6_medium_rec) segue o pipeline OCR do PaddleX
                     score = media das probabilidades dos caracteres mantidos
 
 Uso:
-  .venv/Scripts/python ocr_ref.py ../delphi/bin/imagem/ocr_exemplo.png
+  .venv/Scripts/python ocr_ref.py ../delphi/bin/imagem/ocr_exemplo.png [--all] [--batch=N]
+
+--batch=6 (padrao) reproduz os lotes do PaddleX; --batch=1 le uma linha por
+vez, como o ONNXDemo na CPU.
 """
 import math
 import sys
@@ -181,23 +184,33 @@ def ctc_decode(probs, chars):
     return text, float(prob[keep].mean()) if keep.any() else 0.0
 
 
-def recognize(bgr, boxes):
+def recognize(bgr, boxes, batch=6):
+    """Le as linhas como o pipeline OCR do PaddleX: ordenadas pela proporcao
+    largura/altura, em lotes de `batch` (6 no oficial), cada linha com padding
+    zero ate a mais larga do lote. batch=1 le uma linha por vez."""
     chars = load_dict(REC_DICT)
     sess = ort.InferenceSession(REC_MODEL, providers=["CPUExecutionProvider"])
-    out = []
-    for box, _ in boxes:
-        crop = crop_line(bgr, box)
-        if crop.size == 0:
-            continue
-        probs = sess.run(None, {"x": rec_input(crop)})[0][0]
-        out.append(ctc_decode(probs, chars))
+    crops = [c for c in (crop_line(bgr, box) for box, _ in boxes) if c.size > 0]
+    blobs = [rec_input(c) for c in crops]
+    order = sorted(range(len(crops)), key=lambda i: crops[i].shape[1] / crops[i].shape[0])
+    out = [None] * len(crops)
+    for k in range(0, len(order), batch):
+        group = order[k:k + batch]
+        width = max(blobs[i].shape[3] for i in group)
+        x = np.zeros((len(group), 3, 48, width), np.float32)
+        for j, i in enumerate(group):
+            x[j, :, :, :blobs[i].shape[3]] = blobs[i][0]
+        probs = sess.run(None, {"x": x})[0]
+        for j, i in enumerate(group):
+            out[i] = ctc_decode(probs[j], chars)
     return out
 
 
 if __name__ == "__main__":
     image = sys.argv[1] if len(sys.argv) > 1 else "../delphi/bin/imagem/ocr_exemplo.png"
     bgr, boxes = detect(image)
-    texts = recognize(bgr, boxes)
+    batch = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--batch=")), 6)
+    texts = recognize(bgr, boxes, batch)
     print(f"{len(boxes)} linha(s) de texto")
     for i, ((box, score), (text, rec_score)) in enumerate(zip(boxes, texts)):
         if i < 15 or "--all" in sys.argv:

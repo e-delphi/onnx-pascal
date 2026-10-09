@@ -10,7 +10,8 @@
 ```
 ONNXDemo.dpr              composition root: só amarra as peças
 src/
-  ONNX.CApi.pas           ABI da C API 1.28 (tabela de 424 slots, tipada)
+  ONNX.CApi.pas           ABI da C API 1.28 (tabela de 424 slots, tipada;
+                          aceita DLLs a partir da 1.16)
   ONNX.Types.pas          interfaces e tipos compartilhados da camada ONNX
   ONNX.Runtime.pas        DLL + OrtEnv + allocator (IONNXRuntime, IOrtCore)
   ONNX.Session.pas        execução do grafo, N inputs/N outputs, metadados
@@ -170,7 +171,10 @@ Com `buffalo_l`: mesma pessoa ≈ 0,78, pessoas diferentes ≈ 0,00 — margem d
 ## Limitações conhecidas
 
 - **Batch 1.** `TPredictionView` rejeita explicitamente batch > 1.
-- **CPU apenas.** Os slots `SessionOptionsAppendExecutionProvider_*` já estão
-  mapeados em `ONNX.CApi.pas` para quem quiser adicionar GPU.
+- **GPU só via DirectML.** `--gpu` usa o provider DirectML, que roda em
+  qualquer GPU DirectX 12 mas exige a `onnxruntime.dll` do Windows ML (1.27).
+  CUDA/TensorRT não estão mapeados; para NVIDIA seriam mais rápidos, e o
+  caminho é o mesmo: a função `OrtSessionOptionsAppendExecutionProvider_*`
+  exportada pela DLL, mais um valor em `TExecutionProvider`.
 - A galeria faz busca linear. Suficiente para centenas de rostos; acima disso
   convém um índice.

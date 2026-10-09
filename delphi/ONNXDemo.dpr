@@ -275,6 +275,7 @@ procedure Run;
 var
   Options: TAppOptions;
   Runtime: IONNXRuntime;
+  DllPath: string;
 begin
   // Texto lido (OCR) tem acentos e ideogramas; o console OEM os estragaria.
   SetConsoleOutputCP(CP_UTF8);
@@ -298,7 +299,24 @@ begin
     Exit;
   end;
 
-  Runtime := TONNXRuntime.Create;
+  { A build oficial so-CPU e a mais rapida na CPU; a do Windows ML (com
+    DirectML) fica em dml\ e so e carregada com --gpu. }
+  DllPath := TPath.Combine(ExtractFilePath(ParamStr(0)), 'dml\onnxruntime.dll');
+  if (Options.Session.Provider = epDirectML) and FileExists(DllPath) then
+    Runtime := TONNXRuntime.Create(DllPath)
+  else
+    Runtime := TONNXRuntime.Create;
+
+  // --gpu com uma DLL sem DirectML nao e erro: avisa e segue na CPU.
+  if (Options.Session.Provider = epDirectML) and not Runtime.SupportsDirectML then
+  begin
+    Writeln('AVISO: esta onnxruntime.dll (', Runtime.Version,
+      ') nao tem DirectML; executando na CPU.');
+    Writeln('       Para GPU, coloque a DLL do pacote Windows ML em dml\ (ver README).');
+    Writeln;
+    Options.Session.Provider := epCpu;
+  end;
+  Writeln('Execucao : ', Options.Session.Describe);
 
   case Options.Mode of
     amPredict:

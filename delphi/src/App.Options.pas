@@ -172,6 +172,8 @@ begin
     '  --ocr-rec=ARQ    reconhecedor (padrao: ocr/PP-OCRv6_medium_rec.onnx)' + sLineBreak +
     '  --ocr-dict=ARQ   dicionario (padrao: o .yml ao lado do reconhecedor)' + sLineBreak +
     '  --rec-thr=N      descarta linhas lidas com confianca menor (padrao 0)' + sLineBreak +
+    '  --rec-batch=N    linhas por execucao do reconhecedor; 6 reproduz o' + sLineBreak +
+    '                   PaddleOCR (padrao: 6 com --gpu, 1 na CPU)' + sLineBreak +
     '  As opcoes de TEXTO acima valem para o detector.' + sLineBreak +
     sLineBreak +
     'ROSTOS (encadeia detector + embedding; nao usa --model)' + sLineBreak +
@@ -188,7 +190,10 @@ begin
     '  --save-aligned   salva os recortes 112x112 alinhados (aceita =PASTA)' + sLineBreak +
     sLineBreak +
     'GERAL' + sLineBreak +
-    '  --threads=N      threads intra-op do ONNX Runtime' + sLineBreak +
+    '  --gpu            executa na GPU via DirectML (AMD, NVIDIA ou Intel);' + sLineBreak +
+    '                   --gpu=N escolhe o adaptador. Exige a onnxruntime.dll' + sLineBreak +
+    '                   do Windows ML; sem ela, avisa e roda na CPU.' + sLineBreak +
+    '  --threads=N      threads intra-op do ONNX Runtime (CPU)' + sLineBreak +
     '  --quiet          reduz a saida no console' + sLineBreak +
     '  --no-pause       nao espera ENTER ao final' + sLineBreak +
     '  --help           mostra esta ajuda' + sLineBreak +
@@ -422,6 +427,8 @@ begin
         Result.OcrRecognizePath := Value
       else if Name = 'ocr-dict' then
         Result.OcrDictionaryPath := Value
+      else if Name = 'rec-batch' then
+        Result.Ocr.RecognitionBatchSize := ParseInt(Value, '--rec-batch')
       else if Name = 'rec-thr' then
         Result.Ocr.RecognitionThreshold := ParseFloat(Value, '--rec-thr')
       else if Name = 'remove' then
@@ -480,6 +487,12 @@ begin
       end
       else if Name = 'topk' then
         Result.Predictor.TopK := ParseInt(Value, '--topk')
+      else if Name = 'gpu' then
+      begin
+        Result.Session.Provider := epDirectML;
+        if Value <> '' then
+          Result.Session.DeviceId := ParseInt(Value, '--gpu');
+      end
       else if Name = 'threads' then
       begin
         Result.Threads := ParseInt(Value, '--threads');

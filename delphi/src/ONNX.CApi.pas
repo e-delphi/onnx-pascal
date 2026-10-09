@@ -10,13 +10,24 @@ unit ONNX.CApi;
   slot, na ordem de declaracao. Os indices abaixo foram extraidos diretamente
   de onnxruntime_c_api.h (1.28.1) e o total de slots (424) confere com o
   tamanho do array declarado aqui.
+
+  A tabela so cresce no fim, entao uma DLL mais antiga serve desde que
+  ofereca todos os slots usados. O maior indice mapeado e 130, presente
+  desde muito antes de ORT_API_MIN_VERSION. Isso permite usar a DLL do
+  Windows ML (1.27, com DirectML), que nao conhece a versao 28.
 }
 
 interface
 
 const
-  ORT_API_VERSION    = 28;
-  ORT_API_SLOT_COUNT = 424;
+  ORT_API_VERSION     = 28;
+  { Menor versao aceita (ORT 1.16). Todos os slots usados ja existiam
+    nela; o limite so evita aceitar DLLs antigas demais para testar. }
+  ORT_API_MIN_VERSION = 16;
+  ORT_API_SLOT_COUNT  = 424;
+
+  { Exportada (fora da tabela OrtApi) pelas builds com DirectML. }
+  ORT_DML_APPEND_EXPORT = 'OrtSessionOptionsAppendExecutionProvider_DML';
 
   ORT_LOGGING_LEVEL_VERBOSE = 0;
   ORT_LOGGING_LEVEL_INFO    = 1;
@@ -72,6 +83,7 @@ const
   ORT_SLOT_RUN                        = 9;
   ORT_SLOT_CREATE_SESSION_OPTIONS     = 10;
   ORT_SLOT_SET_EXECUTION_MODE         = 13;
+  ORT_SLOT_DISABLE_MEM_PATTERN        = 17;
   ORT_SLOT_SET_GRAPH_OPT_LEVEL        = 23;
   ORT_SLOT_SET_INTRA_OP_THREADS       = 24;
   ORT_SLOT_SET_INTER_OP_THREADS       = 25;
@@ -151,6 +163,10 @@ type
 
   TOrtCreateSessionOptions = function(out Options: POrtSessionOptions): POrtStatus; stdcall;
   TOrtSetSessionInt = function(Options: POrtSessionOptions; Value: Integer): POrtStatus; stdcall;
+  TOrtSessionOptionsProc = function(Options: POrtSessionOptions): POrtStatus; stdcall;
+  { OrtSessionOptionsAppendExecutionProvider_DML(options, device_id). }
+  TOrtAppendDirectML = function(Options: POrtSessionOptions;
+    DeviceId: Integer): POrtStatus; stdcall;
   TOrtAddSessionConfigEntry = function(Options: POrtSessionOptions;
     Key: PAnsiChar; Value: PAnsiChar): POrtStatus; stdcall;
 
@@ -224,6 +240,7 @@ type
     Run: TOrtRun;
     CreateSessionOptions: TOrtCreateSessionOptions;
     SetExecutionMode: TOrtSetSessionInt;
+    DisableMemPattern: TOrtSessionOptionsProc;
     SetGraphOptimizationLevel: TOrtSetSessionInt;
     SetIntraOpNumThreads: TOrtSetSessionInt;
     SetInterOpNumThreads: TOrtSetSessionInt;
@@ -268,7 +285,7 @@ type
   end;
 
 { Preenche a tabela tipada a partir do array cru de slots devolvido por
-  OrtApiBase.GetApi(ORT_API_VERSION). }
+  OrtApiBase.GetApi. }
 procedure BindOrtApi(Slots: POrtApiSlots; var Api: TOrtApi);
 
 function OrtElementTypeName(ElementType: Integer): string;
@@ -293,6 +310,7 @@ begin
   Api.Run                            := TOrtRun(S(ORT_SLOT_RUN));
   Api.CreateSessionOptions           := TOrtCreateSessionOptions(S(ORT_SLOT_CREATE_SESSION_OPTIONS));
   Api.SetExecutionMode               := TOrtSetSessionInt(S(ORT_SLOT_SET_EXECUTION_MODE));
+  Api.DisableMemPattern              := TOrtSessionOptionsProc(S(ORT_SLOT_DISABLE_MEM_PATTERN));
   Api.SetGraphOptimizationLevel      := TOrtSetSessionInt(S(ORT_SLOT_SET_GRAPH_OPT_LEVEL));
   Api.SetIntraOpNumThreads           := TOrtSetSessionInt(S(ORT_SLOT_SET_INTRA_OP_THREADS));
   Api.SetInterOpNumThreads           := TOrtSetSessionInt(S(ORT_SLOT_SET_INTER_OP_THREADS));

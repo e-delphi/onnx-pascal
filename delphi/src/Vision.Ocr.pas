@@ -13,17 +13,28 @@ unit Vision.Ocr;
   modelos. Sem o classificador de orientacao de linha, texto de cabeca para
   baixo ou vertical lido "ao contrario" sai como lixo - igual ao original
   com use_textline_orientation=False.
+
+  Leitura em lotes: o PaddleX ordena as linhas pela proporcao
+  largura/altura e as le em grupos de RecognitionBatchSize (6 no pipeline
+  oficial), preenchendo cada uma com zero ate a mais larga do grupo. Como o
+  reconhecedor tem atencao global, esse padding muda a leitura de uma ou
+  outra linha: com lote 6 o resultado e o do PaddleOCR de fabrica. Na GPU
+  os lotes tambem sao 3x mais rapidos; na CPU o padding custa caro, entao
+  la o padrao e 1.
 }
 
 interface
 
 uses
   System.SysUtils,
+  System.Math,
   System.Diagnostics,
   System.Generics.Collections,
+  System.Generics.Defaults,
   ONNX.Types,
   Vision.Types,
   Vision.Image,
+  Vision.Preprocess,
   Vision.Predictor,
   Vision.Ocr.Crop;
 
@@ -53,6 +64,9 @@ type
     { Linhas lidas com confianca abaixo disto sao descartadas (o
       text_rec_score_thresh do PaddleX, 0 por padrao). }
     RecognitionThreshold: Single;
+    { Linhas lidas por execucao do reconhecedor. 0 = automatico: 6 na GPU
+      (o lote do PaddleX), 1 na CPU. }
+    RecognitionBatchSize: Integer;
     class function Default: TOcrOptions; static;
   end;
 
@@ -69,7 +83,10 @@ type
     FDetector: IVisionPredictor;
     FRecognizer: IVisionPredictor;
     FCropper: ITextLineCropper;
+    FRecPreprocessor: IImagePreprocessor;
     FOptions: TOcrOptions;
+    procedure RecognizeBatched(const Crops: TArray<IImage>;
+      var Texts: TArray<string>; var Scores: TArray<Single>);
   public
     constructor Create(const ADetector, ARecognizer: IVisionPredictor;
       const ACropper: ITextLineCropper; const AOptions: TOcrOptions);
@@ -90,6 +107,9 @@ type
   end;
 
 implementation
+
+uses
+  Vision.Decoder.Ctc;
 
 { TOcrResult }
 
@@ -117,6 +137,7 @@ end;
 class function TOcrOptions.Default: TOcrOptions;
 begin
   Result.RecognitionThreshold := 0;
+  Result.RecognitionBatchSize := 0;
 end;
 
 { TOcrEngine }
@@ -136,16 +157,106 @@ begin
   FRecognizer := ARecognizer;
   FCropper := ACropper;
   FOptions := AOptions;
+  FOptions.RecognitionBatchSize := Max(1, FOptions.RecognitionBatchSize);
+  FRecPreprocessor := TTextRecPreprocessor.Create;
+end;
+
+procedure TOcrEngine.RecognizeBatched(const Crops: TArray<IImage>;
+  var Texts: TArray<string>; var Scores: TArray<Single>);
+var
+  Order: TArray<Integer>;
+  Prepared: TArray<TPreparedInput>;
+  Inputs, Outputs: TTensorArray;
+  Output: TTensor;
+  Data: TArray<Single>;
+  Transform: TGeometryTransform;
+  First, Count, I, J, Channel, Y, Height, MaxWidth, Width: Integer;
+  Steps, Classes: Integer;
+  Ratios: TArray<Double>;
+begin
+  // Ordem do PaddleX: proporcao crescente; o indice desempata (sort estavel).
+  SetLength(Order, Length(Crops));
+  SetLength(Ratios, Length(Crops));
+  for I := 0 to High(Order) do
+  begin
+    Order[I] := I;
+    Ratios[I] := Crops[I].Width / Crops[I].Height;
+  end;
+  TArray.Sort<Integer>(Order, TComparer<Integer>.Construct(
+    function(const L, R: Integer): Integer
+    begin
+      Result := CompareValue(Ratios[L], Ratios[R]);
+      if Result = 0 then
+        Result := L - R;
+    end));
+
+  Height := FRecognizer.Spec.InputHeight;
+  SetLength(Inputs, 1);
+  First := 0;
+  while First < Length(Order) do
+  begin
+    Count := Min(FOptions.RecognitionBatchSize, Length(Order) - First);
+
+    SetLength(Prepared, Count);
+    MaxWidth := 0;
+    for J := 0 to Count - 1 do
+    begin
+      Prepared[J] := FRecPreprocessor.Prepare(Crops[Order[First + J]], 0, 0,
+        Height, Transform);
+      MaxWidth := Max(MaxWidth, Integer(Prepared[J].Shape[3]));
+    end;
+
+    // [Count, 3, H, MaxWidth]: cada linha colada a esquerda, o resto em zero.
+    Data := nil;
+    SetLength(Data, Count * 3 * Height * MaxWidth);
+    for J := 0 to Count - 1 do
+    begin
+      Width := Prepared[J].Shape[3];
+      for Channel := 0 to 2 do
+        for Y := 0 to Height - 1 do
+          Move(Prepared[J].Data[(Channel * Height + Y) * Width],
+            Data[((J * 3 + Channel) * Height + Y) * MaxWidth],
+            Width * SizeOf(Single));
+    end;
+
+    Inputs[0] := TTensor.Create(FRecognizer.Spec.InputName,
+      TArray<Int64>.Create(Count, 3, Height, MaxWidth), Data);
+    Outputs := FRecognizer.Session.Run(Inputs);
+
+    Output := Default(TTensor);
+    for I := 0 to High(Outputs) do
+      if Outputs[I].Rank = 3 then
+        Output := Outputs[I];
+    if Output.Rank <> 3 then
+      raise EOcrError.Create('O reconhecedor nao devolveu a saida CTC [N, T, C]');
+    Steps := Output.DimAsInt(1);
+    Classes := Output.DimAsInt(2);
+    if Classes <> FRecognizer.Spec.ClassCount + 2 then
+      raise EOcrError.CreateFmt(
+        'Dicionario com %d caracteres nao combina com a saida %s.',
+        [FRecognizer.Spec.ClassCount, Output.ShapeText]);
+
+    for J := 0 to Count - 1 do
+      CtcGreedyDecode(Output.Data, J, Steps, Classes,
+        FRecognizer.Spec.ClassNames, Texts[Order[First + J]],
+        Scores[Order[First + J]]);
+
+    Inc(First, Count);
+  end;
 end;
 
 function TOcrEngine.Read(const Image: IImage): TOcrResult;
 var
   Detected, Recognized: TVisionResult;
+  Crops: TArray<IImage>;
+  Owners: TArray<Integer>;
+  Texts: TArray<string>;
+  Scores: TArray<Single>;
   List: TList<TOcrLine>;
   Line: TOcrLine;
   Crop: IImage;
   Watch: TStopwatch;
-  I: Integer;
+  I, Count: Integer;
 begin
   if Image = nil then
     raise EArgumentNilException.Create('Imagem nao informada');
@@ -158,23 +269,44 @@ begin
   Result.DetectMs := Detected.TotalMs;
 
   Watch := TStopwatch.StartNew;
+
+  // Recortes validos e a deteccao de onde cada um veio.
+  SetLength(Crops, Length(Detected.Detections));
+  SetLength(Owners, Length(Detected.Detections));
+  Count := 0;
+  for I := 0 to High(Detected.Detections) do
+  begin
+    Crop := FCropper.Crop(Image, Detected.Detections[I].Obb);
+    if Crop = nil then
+      Continue;
+    Crops[Count] := Crop;
+    Owners[Count] := I;
+    Inc(Count);
+  end;
+  SetLength(Crops, Count);
+  SetLength(Owners, Count);
+  SetLength(Texts, Count);
+  SetLength(Scores, Count);
+
+  if FOptions.RecognitionBatchSize > 1 then
+    RecognizeBatched(Crops, Texts, Scores)
+  else
+    for I := 0 to Count - 1 do
+    begin
+      Recognized := FRecognizer.Predict(Crops[I]);
+      Texts[I] := Recognized.Text;
+      Scores[I] := Recognized.TextScore;
+    end;
+
   List := TList<TOcrLine>.Create;
   try
-    // Uma linha por vez: batch 1 e o que TPredictionView/decoders aceitam,
-    // e evita o padding de largura que um lote imporia as linhas curtas.
-    for I := 0 to High(Detected.Detections) do
+    for I := 0 to Count - 1 do
     begin
-      Crop := FCropper.Crop(Image, Detected.Detections[I].Obb);
-      if Crop = nil then
+      if Scores[I] < FOptions.RecognitionThreshold then
         Continue;
-
-      Recognized := FRecognizer.Predict(Crop);
-      if Recognized.TextScore < FOptions.RecognitionThreshold then
-        Continue;
-
-      Line.Detection := Detected.Detections[I];
-      Line.Text := Recognized.Text;
-      Line.TextScore := Recognized.TextScore;
+      Line.Detection := Detected.Detections[Owners[I]];
+      Line.Text := Texts[I];
+      Line.TextScore := Scores[I];
       List.Add(Line);
     end;
     Result.Lines := List.ToArray;
@@ -193,8 +325,8 @@ end;
 
 function TOcrEngine.RecognizerDescription: string;
 begin
-  Result := Format('%s | %s', [FRecognizer.Spec.Summary,
-    FRecognizer.PreprocessorDescription]);
+  Result := Format('%s | %s | lote %d', [FRecognizer.Spec.Summary,
+    FRecognizer.PreprocessorDescription, FOptions.RecognitionBatchSize]);
 end;
 
 function TOcrEngine.DictionarySize: Integer;
@@ -211,6 +343,7 @@ class function TOcrEngineFactory.Build(const Runtime: IONNXRuntime;
 var
   DetOptions, RecOptions: TPredictorOptions;
   Detector, Recognizer: IVisionPredictor;
+  Effective: TOcrOptions;
 begin
   if Runtime = nil then
     raise EArgumentNilException.Create('Runtime ONNX nao informado');
@@ -233,8 +366,16 @@ begin
   Recognizer := TVisionPredictorFactory.Build(Runtime, RecognizerPath,
     RecOptions, SessionConfig);
 
+  // Automatico: o lote oficial na GPU, uma linha por vez na CPU.
+  Effective := Options;
+  if Effective.RecognitionBatchSize <= 0 then
+    if SessionConfig.Provider = epDirectML then
+      Effective.RecognitionBatchSize := 6
+    else
+      Effective.RecognitionBatchSize := 1;
+
   Result := TOcrEngine.Create(Detector, Recognizer, TTextLineCropper.Create,
-    Options);
+    Effective);
 end;
 
 end.

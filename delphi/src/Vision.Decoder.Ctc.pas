@@ -42,7 +42,62 @@ type
       const Context: TDecodeContext): TVisionResult;
   end;
 
+{ Decodifica o item Index de uma saida CTC [N, Steps, Classes] (Data
+  achatado). Classes tem que ser Length(Dictionary) + 2. Exposta para a
+  leitura em lote do Vision.Ocr. }
+procedure CtcGreedyDecode(const Data: TArray<Single>; Index, Steps,
+  Classes: Integer; const Dictionary: TArray<string>; out Text: string;
+  out Score: Single);
+
 implementation
+
+procedure CtcGreedyDecode(const Data: TArray<Single>; Index, Steps,
+  Classes: Integer; const Dictionary: TArray<string>; out Text: string;
+  out Score: Single);
+var
+  Base, T, C, Best, Previous, Kept: Integer;
+  BestProb, ProbSum: Double;
+  Builder: TStringBuilder;
+begin
+  Base := Index * Steps * Classes;
+  Builder := TStringBuilder.Create;
+  try
+    Previous := -1;
+    Kept := 0;
+    ProbSum := 0;
+
+    for T := 0 to Steps - 1 do
+    begin
+      Best := 0;
+      BestProb := Data[Base + T * Classes];
+      for C := 1 to Classes - 1 do
+        if Data[Base + T * Classes + C] > BestProb then
+        begin
+          Best := C;
+          BestProb := Data[Base + T * Classes + C];
+        end;
+
+      if (Best <> 0) and (Best <> Previous) then
+      begin
+        if Best = Classes - 1 then
+          Builder.Append(' ')
+        else
+          Builder.Append(Dictionary[Best - 1]);
+        ProbSum := ProbSum + BestProb;
+        Inc(Kept);
+      end;
+      Previous := Best;
+    end;
+
+    Text := Builder.ToString;
+    if Kept > 0 then
+      Score := ProbSum / Kept
+    else
+      Score := 0;
+  finally
+    Builder.Free;
+  end;
+end;
 
 function TCtcDecoder.Task: TVisionTask;
 begin
@@ -76,10 +131,7 @@ function TCtcDecoder.Decode(const Outputs: TTensorArray;
   const Context: TDecodeContext): TVisionResult;
 var
   Tensor: TTensor;
-  Data: TArray<Single>;
-  Steps, Classes, Dictionary, T, C, Best, Previous, Kept: Integer;
-  BestProb, ProbSum: Double;
-  Builder: TStringBuilder;
+  Steps, Classes, Dictionary: Integer;
 begin
   Result := Default(TVisionResult);
   Result.Task := vtTextRec;
@@ -89,8 +141,8 @@ begin
   Tensor := FindSequenceTensor(Outputs);
   Steps := Tensor.DimAsInt(1);
   Classes := Tensor.DimAsInt(2);
-  Data := Tensor.Data;
-  if (Steps <= 0) or (Classes <= 0) or (Length(Data) < Steps * Classes) then
+  if (Steps <= 0) or (Classes <= 0) or
+     (Length(Tensor.Data) < Steps * Classes) then
     raise EDecodeError.CreateFmt('Saida CTC invalida: %s', [Tensor.ShapeText]);
 
   // O tamanho do dicionario tem que fechar com a saida: branco + N + espaco.
@@ -101,41 +153,8 @@ begin
       'Use o inference.yml do mesmo modelo em --labels.',
       [Dictionary, Tensor.ShapeText, Classes - 2]);
 
-  Builder := TStringBuilder.Create;
-  try
-    Previous := -1;
-    Kept := 0;
-    ProbSum := 0;
-
-    for T := 0 to Steps - 1 do
-    begin
-      Best := 0;
-      BestProb := Data[T * Classes];
-      for C := 1 to Classes - 1 do
-        if Data[T * Classes + C] > BestProb then
-        begin
-          Best := C;
-          BestProb := Data[T * Classes + C];
-        end;
-
-      if (Best <> 0) and (Best <> Previous) then
-      begin
-        if Best = Classes - 1 then
-          Builder.Append(' ')
-        else
-          Builder.Append(Context.Spec.ClassNames[Best - 1]);
-        ProbSum := ProbSum + BestProb;
-        Inc(Kept);
-      end;
-      Previous := Best;
-    end;
-
-    Result.Text := Builder.ToString;
-    if Kept > 0 then
-      Result.TextScore := ProbSum / Kept;
-  finally
-    Builder.Free;
-  end;
+  CtcGreedyDecode(Tensor.Data, 0, Steps, Classes, Context.Spec.ClassNames,
+    Result.Text, Result.TextScore);
 end;
 
 initialization

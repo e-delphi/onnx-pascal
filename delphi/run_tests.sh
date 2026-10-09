@@ -41,6 +41,11 @@ run "texto    / documento"  "98 linha\(s\) de texto" ocr/PP-OCRv6_medium_det.onn
 run "ocr      / bus.jpg"    "emisiones"          --ocr imagem/bus.jpg
 run "ocr      / documento"  "Markov Entropy Decomposition" --ocr imagem/ocr_exemplo.png
 
+# GPU (DirectML). Sem a DLL do Windows ML o programa avisa e roda na CPU,
+# entao estes casos tambem passam numa maquina sem GPU.
+run "gpu detect / bus.jpg"  "bus.*9[0-9],"      yolo/x/yolo26x.onnx      imagem/bus.jpg    --gpu --out=saida/t_gpu_detect.png
+run "gpu ocr  / documento"  "Markov Entropy Decomposition" --ocr imagem/ocr_exemplo.png --gpu
+
 run "face     / obama.jpg"  "score [0-9]+"       --query imagem/obama.jpg
 echo "─────────────────────────────────────────────────────────────"
 echo "  Erros esperados (devem falhar com mensagem limpa, sem crash):"
